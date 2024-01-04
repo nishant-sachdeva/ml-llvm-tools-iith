@@ -15,11 +15,28 @@
 #include "llvm/IR/Function.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+
+#include <fstream>
+#include <iostream>
+#include <cxxabi.h>
 using namespace llvm;
 
 #define DEBUG_TYPE "hello"
 
 STATISTIC(HelloCounter, "Counts number of functions greeted");
+
+// Function to get demanged instruction name
+std::string getDemagledName(const llvm::Instruction *instruction) {
+  auto instructionName = instruction->getName().str();
+  std::size_t sz = 17;
+  int status;
+  char *const readable_name =
+      abi::__cxa_demangle(instructionName.c_str(), 0, &sz, &status);
+  auto demangledName =
+      status == 0 ? std::string(readable_name) : std::string(instructionName);
+  free(readable_name);
+  return demangledName;
+}
 
 namespace {
 // Hello - The first implementation, without getAnalysisUsage.
@@ -46,9 +63,31 @@ struct Hello2 : public FunctionPass {
   Hello2() : FunctionPass(ID) {}
 
   bool runOnFunction(Function &F) override {
-    ++HelloCounter;
-    errs() << "Hello: ";
-    errs().write_escaped(F.getName()) << '\n';
+
+    const std::string outputPath = "/home/nishu/nishant/instructionNames.txt";
+    std::ofstream outputFile(outputPath, std::ios::app);
+
+    if (!outputFile.is_open()) {
+      std::cerr << "Error: Unable to open the file for writing." << std::endl;
+      return false;
+    }
+
+    std::ostream& customOut = outputFile;
+
+    // print instruction count
+    customOut << "Instruction Count: " << F.getInstructionCount() << "\n";
+
+    for (auto &BB : F) {
+      for (auto &I : BB) {
+        // customOut() << "Hello: ";
+        customOut << "Normal Name: "; 
+        customOut << I.getName().str() << "\t";
+        customOut << "\t";
+        customOut << "Demangled Name: ";
+        customOut << getDemagledName(&I);
+        customOut << "\n";
+      }
+    }
     return false;
   }
 
@@ -61,4 +100,4 @@ struct Hello2 : public FunctionPass {
 
 char Hello2::ID = 0;
 static RegisterPass<Hello2>
-    Y("hello2", "Hello World Pass (with getAnalysisUsage implemented)");
+    Y("hello2", "Hello World Pass with instruction names printed");
